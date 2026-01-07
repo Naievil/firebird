@@ -19,6 +19,7 @@
 #include "schedule.h"
 #include "misc.h"
 #include "mem.h"
+#include "gif.h"
 
 /* cycle_count_delta is a (usually negative) number telling what the time is relative
  * to the next scheduled event. See sched.c */
@@ -158,6 +159,8 @@ void throttle_interval_event(int index)
     }
 
     last_throttle = new_last_throttle;
+
+    gif_new_frame();
 
     gui_do_stuff(true);
 }
@@ -378,6 +381,7 @@ void emu_loop(bool reset)
                 cpu_thumb_loop();
             else
                 cpu_arm_loop();
+                
         }
     }
 

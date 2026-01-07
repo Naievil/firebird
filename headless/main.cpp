@@ -5,6 +5,7 @@
 #include "core/mem.h"
 #include "core/mmu.h"
 #include "core/usblink_queue.h"
+#include "core/gif.h"
 
 void gui_do_stuff(bool wait)
 {
@@ -74,6 +75,10 @@ static const char OPT_DEBUG_ON_START[]     = "--debug-on-start";
 static const char OPT_DEBUG_ON_WARN[]      = "--debug-on-warn";
 static const char OPT_PRINT_ON_WARN[]      = "--print-on-warn";
 static const char OPT_DIAGS[]              = "--diags";
+static const char OPT_RDBG_PORT[]          = "--rdbg-port";
+static const char OPT_GDB_PORT[]           = "--gdb-port";
+static const char OPT_WRITE_GIF[]          = "--write-gif";
+static const char OPT_REALTIME[]           = "--realtime";
 static const char OPT_HELP[]               = "--help";
 static uint32_t default_rampayload_base = 0x10000000;
 
@@ -90,14 +95,21 @@ void show_help_menu(void)
 	fprintf(stderr, "  %-24s Enter debugger on start\n", OPT_DEBUG_ON_START);
 	fprintf(stderr, "  %-24s Enter debugger on warnings\n", OPT_DEBUG_ON_WARN);
 	fprintf(stderr, "  %-24s Print warnings to console\n", OPT_PRINT_ON_WARN);
+	fprintf(stderr, "  %-24s Remote debugger port\n", OPT_RDBG_PORT);
+	fprintf(stderr, "  %-24s GDB port\n", OPT_GDB_PORT);
 	fprintf(stderr, "  %-24s Use diagnostics boot order\n", OPT_DIAGS);
+	fprintf(stderr, "  %-24s Path to save GIF recording\n", OPT_WRITE_GIF);
+	fprintf(stderr, "  %-24s Run in realtime (default: turbo mode)\n", OPT_REALTIME);
 }
 
 int main(int argc, char *argv[])
 {
-	const char *boot1 = nullptr, *flash = nullptr, *snapshot = nullptr, *rampayload = nullptr;
+	const char *boot1 = nullptr, *flash = nullptr, *snapshot = nullptr, *rampayload = nullptr, *gif_filename = nullptr;
 	bool help_menu = false;
 	uint32_t rampayload_base = default_rampayload_base;
+	unsigned int port_gdb = 0, port_rdbg = 0;
+
+	turbo_mode = true;
 
 	for(int argi = 1; argi < argc; ++argi)
 	{
@@ -119,6 +131,14 @@ int main(int argc, char *argv[])
 			print_on_warn = true;
 		else if(strcmp(argv[argi], OPT_DIAGS) == 0)
 			boot_order = ORDER_DIAGS;
+		else if(strcmp(argv[argi], OPT_RDBG_PORT) == 0)
+			port_rdbg = strtol(argv[++argi], nullptr, 0);
+		else if(strcmp(argv[argi], OPT_GDB_PORT) == 0)
+			port_gdb = strtol(argv[++argi], nullptr, 0);
+		else if(strcmp(argv[argi], OPT_WRITE_GIF) == 0)
+			gif_filename = argv[++argi];
+		else if(strcmp(argv[argi], OPT_REALTIME) == 0)
+			turbo_mode = false;
 		else if (strcmp(argv[argi], OPT_HELP) == 0)
 			help_menu = true;
 		else
@@ -144,7 +164,7 @@ int main(int argc, char *argv[])
 	path_boot1 = boot1;
 	path_flash = flash;
 
-	if(!emu_start(0, 0, snapshot))
+	if(!emu_start(port_gdb, port_rdbg, snapshot))
 		return 1;
 
 	if(rampayload)
@@ -179,8 +199,19 @@ int main(int argc, char *argv[])
 		arm.reg[15] = rampayload_base;
 	}
 
-	turbo_mode = true;
+	if(gif_filename)
+	{
+		if(!gif_start_recording(gif_filename, 1))
+		{
+			fprintf(stderr, "Failed to start GIF recording to %s\n", gif_filename);
+			return 6;
+		}
+	}
+
 	emu_loop(false);
+
+	if(gif_filename)
+		gif_stop_recording();
 
 	return 0;
 }

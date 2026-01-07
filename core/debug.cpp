@@ -29,6 +29,8 @@
 #include "translate.h"
 #include "usblink_queue.h"
 #include "gdbstub.h"
+#include "keypad.h"
+#include "keymap.h"
 #include "os/os.h"
 
 std::string ln_target_folder;
@@ -196,6 +198,7 @@ int process_debug_cmd(char *cmdline) {
                     "d <address> - dump memory\n"
                     "k <address> <+r|+w|+x|-r|-w|-x> - add/remove breakpoint\n"
                     "k - show breakpoints\n"
+                    "key <row> <col> <0|1> - set keypad key state\n"
                     "ln c - connect\n"
                     "ln s <file> - send a file\n"
                     "ln st <dir> - set target directory\n"
@@ -212,7 +215,9 @@ int process_debug_cmd(char *cmdline) {
                     "u[a|t] [address] - disassemble memory\n"
                     "wm <file> <start> <size> - write memory to file\n"
                     "wf <file> <start> [size] - write file to memory\n"
+                    "ws <file> - write snapshot file\n"
                     "stop - stop the emulation\n"
+
                     "exec <path> - exec file with ndless\n");
     } else if (!strcasecmp(cmd, "b")) {
         char *fp = strtok(NULL, " \n\r");
@@ -480,6 +485,18 @@ int process_debug_cmd(char *cmdline) {
         }
         fclose(f);
         return 0;
+    } else if (!strcasecmp(cmd, "ws")) {
+        char *filename = strtok(NULL, " \n\r");
+        if (!filename) {
+            gui_debug_printf("Missing file parameter.\n");
+            return 0;
+        }
+        if (emu_suspend(filename)) {
+            gui_debug_printf("Snapshot written to %s\n", filename);
+        } else {
+            gui_debug_printf("Failed to write snapshot to %s\n", filename);
+        }
+        return 0;
     } else if (!strcasecmp(cmd, "ss")) {
         char *addr_str = strtok(NULL, " \n\r");
         char *len_str = strtok(NULL, " \n\r");
@@ -562,6 +579,23 @@ int process_debug_cmd(char *cmdline) {
         struct armloader_load_params params[3] = {arg_path, arg_zero, arg_zero};
         armloader_load_snippet(SNIPPET_ndls_exec, params, 3, NULL);
         return 1;
+    } else if (!strcasecmp(cmd, "key")) {
+        char *row_str = strtok(NULL, " \n\r");
+        char *col_str = strtok(NULL, " \n\r");
+        char *state_str = strtok(NULL, " \n\r");
+        if (!row_str || !col_str || !state_str) {
+            gui_debug_printf("Missing parameters: key <row> <col> <0|1>\n");
+        } else {
+            int row = atoi(row_str);
+            int col = atoi(col_str);
+            int state = atoi(state_str);
+            if (row < 0 || row >= keymap::ROWS || col < 0 || col >= keymap::COLS || (state != 0 && state != 1)) {
+                gui_debug_printf("Invalid parameters: row 0-%d, col 0-%d, state 0 or 1\n", keymap::ROWS - 1, keymap::COLS - 1);
+            } else {
+                keypad_set_key(row, col, state);
+                gui_debug_printf("Set key row %d col %d to %d\n", row, col, state);
+            }
+        }
     } else {
         gui_debug_printf("Unknown command %s\n", cmd);
     }
@@ -653,6 +687,8 @@ bool rdebug_bind(unsigned int port) {
     struct sockaddr_in sockaddr;
     int r;
 
+    printf("rdebug_bind: binding to port %u\n", port);
+
 #ifdef __MINGW32__
     WORD wVersionRequested = MAKEWORD(2, 0);
     WSADATA wsaData;
@@ -691,6 +727,7 @@ static char rdebug_inbuf[MAX_CMD_LEN];
 size_t rdebug_inbuf_used = 0;
 
 void rdebug_recv(void) {
+
     if(listen_socket_fd == -1)
         return;
 

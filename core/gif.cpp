@@ -19,6 +19,7 @@ static bool recording = false;
 static GifWriter writer;
 static std::vector<RGB24> buffer;
 static unsigned int framenr = 0, framenrskip = 0, framedelay = 0;
+static unsigned int frame_count = 0;
 
 bool gif_start_recording(const char *filename, unsigned int frameskip)
 {
@@ -33,6 +34,7 @@ bool gif_start_recording(const char *filename, unsigned int frameskip)
         recording = true;
 
     buffer.resize(320*240);
+    frame_count = 0;
 
     return recording;
 }
@@ -83,6 +85,10 @@ void gif_new_frame()
 
     if(!GifWriteFrame(&writer, reinterpret_cast<const uint8_t*>(buffer.data()), 320, 240, framedelay))
         recording = false;
+
+    frame_count++;
+    if(frame_count % 1000 == 0)
+        printf("-- RECORDER: GIF frames recorded: %u\n", frame_count);
 }
 
 bool gif_stop_recording()
