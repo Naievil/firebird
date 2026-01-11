@@ -10,10 +10,6 @@
 #include "os/os.h"
 #include "gif-h/gif.h"
 
-struct RGB24 {
-    uint8_t r, g, b, a;
-};
-
 static std::mutex gif_mutex;
 static bool recording = false;
 static GifWriter writer;

@@ -85,7 +85,7 @@ class EmulatorController:
         debug_print("Sending stop command via rdbg...")
         self.sleep(1)
         stop_cmd = f"echo stop | nc -q 1 localhost {self.rdbg_port}"
-        subprocess.run(stop_cmd, shell=True, check=False, capture_output=False)
+        subprocess.run(stop_cmd, shell=True, check=True, capture_output=True)
         debug_print("Waiting for the emulator process to exit...")
         self.child.expect(pexpect.EOF)
         debug_print("Closing logfile...")
@@ -100,17 +100,17 @@ class EmulatorController:
 
     def send_file(self, file_path: str, dest_file_path: str = "/") -> None:
         debug_print(f"Sending file {file_path} to {dest_file_path}...")
-        send_cmd = f"echo 'ln st {dest_file_path}\n ln s {file_path}' | nc -q 1 localhost {self.rdbg_port}"
+        send_cmd = f"echo 'ln st {dest_file_path}\n ln s {file_path}' | nc -q 0 localhost {self.rdbg_port}"
         subprocess.run(send_cmd, shell=True, check=True)
 
     def take_snapshot(self, path: str) -> None:
         debug_print(f"Saving snapshot to {path} via rdbg...")
-        snapshot_cmd = f"echo 'ws {path}' | nc -q 1 localhost {self.rdbg_port}"
+        snapshot_cmd = f"echo 'ws {path}' | nc -q 0 localhost {self.rdbg_port}"
         subprocess.run(snapshot_cmd, shell=True, check=True)
 
     def take_screenshot(self, path: str) -> None:
         debug_print(f"Taking screenshot to {path} via rdbg...")
-        scr_cmd = f"echo 'scr {path}' | nc -q 1 localhost {self.rdbg_port}"
+        scr_cmd = f"echo 'scr {path}' | nc -q 0 localhost {self.rdbg_port}"
         subprocess.run(scr_cmd, shell=True, check=True)
 
     """
@@ -154,8 +154,8 @@ class EmulatorController:
         self.sleep(5)
         self.press_and_release_key(KeyMap._enter)
         self.sleep(2)
-        #self.take_snapshot(snapshot_path)
-        self.take_screenshot(screenshot_path)
+        self.take_snapshot(str(snapshot_path))
+        self.take_screenshot(str(screenshot_path))
 
 
 def test_os_install_to_home(
@@ -170,13 +170,15 @@ def test_os_install_to_home(
     snapshot_path = os.path.join(workspace_path, "snapshot.bin")
     screenshot_path = os.path.join(workspace_path, "output.rgb")
 
-    # Power on + OS install to home screen
-    emu = EmulatorController(boot1_path, flash_path, firebird_headless_path, realtime=False)
-    emu.os_install_to_home(snapshot_path, screenshot_path, os_path)
-    emu.power_down()
+    try:
+        # Power on + OS install to home screen
+        emu = EmulatorController(boot1_path, flash_path, firebird_headless_path)
+        emu.os_install_to_home(snapshot_path, screenshot_path, os_path)
+    finally:
+        emu.power_down()
 
     # Verify files exist
-    #assert os.path.exists(snapshot_path)
+    assert os.path.exists(snapshot_path)
     assert os.path.exists(screenshot_path)
 
     # Compute MD5s

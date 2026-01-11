@@ -39,6 +39,9 @@ bool lcd_resume(const emu_snapshot *snapshot);
 uint32_t lcd_read_word(uint32_t addr);
 void lcd_write_word(uint32_t addr, uint32_t value);
 
+struct RGB24 {
+    uint8_t r, g, b, a;
+};
 #ifdef __cplusplus
 }
 #endif

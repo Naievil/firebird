@@ -15,7 +15,7 @@
 #include <fcntl.h>
 #include <netinet/tcp.h>
 #endif
-
+#include <vector>
 #include <condition_variable>
 
 #include "armsnippets.h"
@@ -31,6 +31,8 @@
 #include "gdbstub.h"
 #include "keypad.h"
 #include "keymap.h"
+#include "gif.h"
+#include "lcd.h"
 #include "os/os.h"
 
 std::string ln_target_folder;
@@ -106,6 +108,51 @@ static void dump(uint32_t addr) {
         }
         gui_debug_printf("\n");
     }
+}
+
+void lcd_cx_draw_frame(uint16_t *buffer);
+bool dump_framebuffer(const char *filename)
+{
+    static std::array<uint16_t, 320 * 240> framebuffer;
+    static std::vector<RGB24> rgbbuffer;
+
+    lcd_cx_draw_frame(framebuffer.data());
+
+    uint16_t *ptr16 = framebuffer.data();
+    RGB24 *ptr24 = rgbbuffer.data();
+
+    /* Convert RGB565 or RGB444 to RGBA8888 */
+    if(emulate_cx)
+    {
+        for(unsigned int i = 0; i < 320*240; ++i)
+        {
+            ptr24->r = (*ptr16 & 0b1111100000000000) >> 8;
+            ptr24->g = (*ptr16 & 0b0000011111100000) >> 3;
+            ptr24->b = (*ptr16 & 0b0000000000011111) << 3;
+            ++ptr24;
+            ++ptr16;
+        }
+    }
+    else
+    {
+        for(unsigned int i = 0; i < 320*240; ++i)
+        {
+            uint8_t pix = ~(*ptr16 & 0xF);
+            ptr24->r = pix << 4;
+            ptr24->g = pix << 4;
+            ptr24->b = pix << 4;
+            ++ptr24;
+            ++ptr16;
+        }
+    }
+
+    FILE *f = fopen_utf8(filename, "wb");
+    if (!f)
+        return false;
+
+    fwrite(ptr24, sizeof(RGB24), 320*240, f);
+    fclose(f);
+    return true;
 }
 
 static uint32_t parse_expr(char *str) {
@@ -208,6 +255,7 @@ int process_debug_cmd(char *cmdline) {
                     "pw <address> <value> - port or memory write\n"
                     "r - show registers\n"
                     "rs <regnum> <value> - change register value\n"
+                    "scr <file> - take screenshot to RGB file\n"
                     "ss <address> <length> <string> - search a string\n"
                     "s - step instruction\n"
                     "t+ - enable instruction translation\n"
@@ -579,6 +627,17 @@ int process_debug_cmd(char *cmdline) {
         struct armloader_load_params params[3] = {arg_path, arg_zero, arg_zero};
         armloader_load_snippet(SNIPPET_ndls_exec, params, 3, NULL);
         return 1;
+    } else if (!strcasecmp(cmd, "scr")) {
+        char *filename = strtok(NULL, " \n\r");
+        if (!filename) {
+            gui_debug_printf("Missing file parameter.\n");
+        } else {
+            if (dump_framebuffer(filename)) {
+                gui_debug_printf("Screenshot saved to %s\n", filename);
+            } else {
+                gui_debug_printf("Failed to save screenshot to %s\n", filename);
+            }
+        }
     } else if (!strcasecmp(cmd, "key")) {
         char *row_str = strtok(NULL, " \n\r");
         char *col_str = strtok(NULL, " \n\r");

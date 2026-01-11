@@ -314,7 +314,12 @@ bool emu_start(unsigned int port_gdb, unsigned int port_rdbg, const char *snapsh
         gdbstub_init(port_gdb);
 
     if(port_rdbg)
-        rdebug_bind(port_rdbg);
+        if(!rdebug_bind(port_rdbg))
+        {
+            gui_debug_printf("Could not bind rdebug to port %u (this is a fatal error now)\n", port_rdbg);
+            emu_cleanup();
+            return false;
+        }
 
     usblink_queue_reset();
 
